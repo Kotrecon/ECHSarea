@@ -1,109 +1,117 @@
+if (!require("readxl")) {
+  install.packages("readxl")
+  library(readxl)
+  }
+
 # **********************************#
 #     Расчет зоны поражения АХОВ
 #
 #
 #
+# Вид прогноза predict_type
+# 0 - авария(online_predict)
+# 1 - прогнозирование (offline_predict)
+predict_type <- TRUE
+# Количество выброса ХОВ (HOV) в тоннах Q0 - hov_q0
+# Плотность ХОВ - density в т/м3
+# с учетом агрегатного состояния ХОВ substate, дает номер значения плотности
+# через вектор density
+# 1 - сжатый газ (compressed)
+# 2 - сжиженный газ (liquid)
+# 3 - ядовитый газ (toxic):
+# pipeline_q - максимальное количество ХОВ в трубопроводе между отсекателями т
+# hov_name -  наименование ХОВ
+# equal_1- эквивалентное количество ХОВ для первичного облака
+# equal_2 - эквивалентное количество ХОВ для вторичного облака
+# toxic - токсичность ХОВ
+hov_q0 <- 0
+hov_q <- 0
+hov_name <- 0
+equal_1 <- 0
+equal_2 <- 0
+boiling_temp <- 0
+toxic <- 0
+dt_paramraw <- 0
+substate <- 1
+compressed <- 0
+liquid <- 0
+toxic <- 0
+density <- c(compressed, liquid, toxic)
+pipline_q <- 250
 
-# Вид прогноза predictType
-# 0 - авария(realTimePredictType
-# 1 - прогнозирование (predictTimePredictType)
-predictType <- TRUE
+# Объем емкости tanks_capacity (вектор) м3 и количество емкостей tanks
+tanks <- 1
+tanks_capacity <- c(1:tanks)
 
-# Количество выброса ХОВ (CDS) в тоннах Q0 Плотность ХОВ densityCDS в т/м3 d с
-# учетом грегатного состояние ХОВ gasSubstance дает номер значения плотности в
-# векторе densityCDS
-# 1 - сжатый газ (gasCompressed)
-# 2 - сжиженный газ (gasLiquid)
-# 3 - ядовитый газ (gasToxic):
-# piplineCDS - максимальное количество АХОВ в трубопроводе между отсекателями т
-# nameCDS -  наименование ХОВ
-# equalCDS_1- эквивалентное количество ХОВ для первичного облака
-# equalCDS_2 - эквивалентное количество ХОВ для вторичного облака
+# Толщина слоя разлива h по умолчанию 0,05 м
+# Условия разлива spill_case (1 - тип разлива, 2 - высота H, 3 - площадь F)
+# Тип разлива spill_type:
+# 0 - трубопровод (spill_pipeline)
+# 1 - свободный разлив (spill_free)
+# 2 - в поддон одной емкости (spill_pallet)
+# 3 - в поддон  N емкостей (spill_npallet)
+# Высота разлива H в м -  spill_h
+# Реальная площадь F разлива в паддон/обвалок spill_f м2
 
-name_cds <- 0
-equalCDS_1 <- 0
-equalCDS_2 <- 0
-boilingTempCDS <- 0
-toxicCDS <- 0
-numCDS <- 0
+h <- 0.05
+spill_f <- 0
+spill_h <- 0
+spill_type <- 1
+spill_pipline <- 0
+spill_free <- 0
+spill_pallet <- 0
+spill_npallet <- 0
+spill_case <- c(spill_type, spill_h, spill_f)
 
-gasSubstance <- 1
-gasCompressed <- 0
-gasLiquid <- 0
-gasToxic <- 0
-density_CDS <- c(gasCompressed, gasLiquid, gasToxic)
+k1 <- 1
+k2 <- 0
+k3 <- 0
+k4 <- 0
+k5 <- 0
+k6 <- 0
+k7 <- numeric(10)
 
-piplineCDS <- 250
+names(k7) <- c("-40", "-20", "0", "20", "40", "-40", "-20", "0", "20", "40")
 
-# Объем емкости tanksCDSCapacity (вектор) м3 и количество емкостей tanksCDS
-tanksCDS <- 1
-tanksCDSCapacity <- c(1:tanksCDS)
+# dt_hov35 - таблица параметров ХОВ
+dt_hov35 <- read_excel(
+  "data/HOV_Param.xlsx", sheet = "HOV_Param", col_names = TRUE,
+  col_types = c("numeric", "text", "numeric", "numeric", "numeric", "numeric",
+                "numeric", "numeric", "numeric", "numeric", "numeric",
+                "numeric", "numeric", "numeric", "numeric", "numeric",
+                "numeric", "numeric", "numeric", "numeric"), na = "NA")
 
-# Толщина слоя разлива h - spillThickness по умолчанию 0,05 м
-# Реальная площадь F разлива в паддон/обвалок spillPalletArea м2
-# Условия разлива spillCase (1 - тип разлива, 2 - высота H, 3 - площадь F)
-# Тип разлива spillType:
-# 0 - трубопровод (spillPipeline)
-# 1 - свободный разлив (spillFree)
-# 2 - в поддон одной емкости (spillPallet)
-# 3 - в поддон  N емкостей spillPalletN
-# Высота разлива H   в м -  spillHeight
-spillThickness <- 0.05
-spillPalletArea <- 0
-spillHeight <- 0
-spillType <- 1
-spillCase <- c(spillType, spillHeight, spillPalletArea)
+# df_hov_predict - фрэйм текущих параметров параметров АХОВ
+df_hov_predict <- data.frame(
+  "Номер" = dt_paramraw, "АХОВ" = hov_name,
+  "Плотность АХОВ, т/м3 (сжатый газ)" = density[1],
+  "Плотность АХОВ, т/м3 (сжиженный газ)" = density[2],
+  "Плотность АХОВ, т/м3 (ядовитый газ)" = density[3],
+  "Температура кипения, С" = boiling_temp,
+  "Пороговая токсидоза, мг/мин" = toxic,
+  "K1" = k1, "K2" = k2, "K3" = k3, "K7, для температуры воздуха" = k7)
 
-# df_CDS - таблица параметров АХОВ
-#
-K1 <- 1
-K2 <- 0
-K3 <- 0
-K4 <- 0
-K5 <- 0
-K6 <- 0
-K7 <- numeric(10)
-
-names(K7) <- c("-40", "-20", "0", "20", "40", "-40", "-20", "0", "20", "40")
-
-
-df_CDS <- data.frame(
-  "Номер" = numCDS,
-  "АХОВ" = nameCDS,
-  "Плотность АХОВ, т/м3 (сжатый газ)" = densityCDS[1],
-  "Плотность АХОВ, т/м3 (сжиженный газ)" = densityCDS[2],
-  "Плотность АХОВ, т/м3 (ядовитый газ)" = densityCDS[3],
-  "Температура кипения, С" = boilingTempCDS,
-  "Пороговая токсидоза, мг/мин" = toxicCDS,
-  "K1" = K1,
-  "K2" = K2,
-  "K3" = K3,
-  "K7, для температуры воздуха" = K7
-)
-
-
-
-df_CDS[1, 1] <- (3)
+df_hov_predict[1, 1] <- (3)
 
 # *****Толщина слоя жидкости h, м ********************************************
-LayerThicknesscallc <- function(CDS, densityCDS, spillCase) {
-  if (spillCase[spillType] < 1) {
-    return(piplineCDS)
+layerThicknesscallc <- function(hov_q, density, spill_case) {
+  if (spill_case[spill_type] < 1) {
+    return(pipline_q)
   } else {
-    if (spillCase[spillType] < 2) {
+    if (spill_case[spill_type] < 2) {
       return(0.05)
     } else {
-      if (spillCase[spillType] < 3) {
-        return(spillCase[spillHeight] - 0.2)
+      if (spill_case[spill_type] < 3) {
+        return(spill_case[spill_h] - 0.2)
       }
-      return(CDS / (spillCase[spillPalletArea] * densityCDS))
+      return(hov_q / (spill_case[spill_f] * density))
     }
   }
 }
 
 # Определение количественных характеристик выброса АХОВ
 
-# Вычисляем эквивалентное количество Qэ1 (т) (primaryCloudCSD) АХОВ, перешедшее
+# Вычисляем эквивалентное количество Qэ1 (т) (equal_1) АХОВ, перешедшее
 # в первичное облако по формуле:
 #
 #  Qэ1 = К1 ×К3 ×К5 × К7 × QО
@@ -120,31 +128,23 @@ LayerThicknesscallc <- function(CDS, densityCDS, spillCase) {
 # (на которое делается прогноз)
 # K7 - коэффициент, учитывающий температуру воздуха (для сжатых газов = 1)
 #
-# Вычисляем эквивалентное количество вещества во вторичном облаке по формуле:
-#
+# Вычисляем эквивалентное количество вещества equal_2 во вторичном облаке по 
+# формуле:
 # Qэ2 = (1-K1) * K2 * K3 * K4 * K5 * K6 * K7 * (Q0/(h*d))
 
-K1 <- 1
-K2 <- 0
-K3 <- 0
-K4 <- 0
-K5 <- 0
-K6 <- 0
-K7 <- 1
+k1 <- 1
+k2 <- 0
+k3 <- 0
+k4 <- 0
+k5 <- 0
+k6 <- 0
+k7 <- 1
 
-
-
-if (gasSubstance == 1) {
-  K1 <- 1
-  K7 <- 1
+if (substate == 1) {
+  k1 <- 1
+  k7 <- 1
 }
-
-
-
-
-
 
 # вычисляем высоту слоя разлива h, м
 
-spillThickness <- layerThicknesscallc(CDS, densityCDS, spillCase)
-
+spill_h <- layerThicknesscallc(hov_q, density, spill_case)
