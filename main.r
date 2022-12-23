@@ -69,8 +69,8 @@ df_scenario <- data.frame(predict_type, hov_name, hov_state, spill_type[1],
 
 
 
-# dt_hov35 - таблица параметров ХОВ
-dt_hov35 <- read_excel(
+# dt_hov - таблица параметров ХОВ
+dt_hov <- read_excel(
   "data/HOV_Param.xlsx", sheet = "HOV_Param", col_names = TRUE,
   col_types = c("numeric", "text", "numeric", "numeric", "numeric", "numeric",
                 "numeric", "numeric", "numeric", "numeric", "numeric",
@@ -78,7 +78,11 @@ dt_hov35 <- read_excel(
                 "numeric", "numeric", "numeric", "numeric"), na = "NA")
 
 # df_hov_predict - фрэйм текущих параметров параметров выбранного АХОВ
-df_hov_predict <- list(dt_hov35)
+df_hov_predict <- list(dt_hov(1,1))
+
+# tidyjson 
+
+
   
   
 #  
