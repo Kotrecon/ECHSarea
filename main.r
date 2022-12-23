@@ -5,73 +5,69 @@ if (!require("readxl")) {
 
 # **********************************#
 #     Расчет зоны поражения АХОВ
-#
-#
-#
-# Вид прогноза predict_type
-# 0 - авария(online_predict)
-# 1 - прогнозирование (offline_predict)
-predict_type <- TRUE
-# Количество выброса ХОВ (HOV) в тоннах Q0 - hov_q0
-# Плотность ХОВ - density в т/м3
-# с учетом агрегатного состояния ХОВ substate, дает номер значения плотности
-# через вектор density
-# 1 - сжатый газ (compressed)
-# 2 - сжиженный газ (liquid)
-# 3 - ядовитый газ (toxic):
-# pipeline_q - максимальное количество ХОВ в трубопроводе между отсекателями т
-# hov_name -  наименование ХОВ
-# equal_1- эквивалентное количество ХОВ для первичного облака
-# equal_2 - эквивалентное количество ХОВ для вторичного облака
-# toxic - токсичность ХОВ
-hov_q0 <- 0
-hov_q <- 0
-hov_name <- 0
-equal_1 <- 0
-equal_2 <- 0
-boiling_temp <- 0
-toxic <- 0
-dt_paramraw <- 0
-substate <- 1
-compressed <- 0
-liquid <- 0
-toxic <- 0
-density <- c(compressed, liquid, toxic)
-pipline_q <- 250
+# тип прогноза: 1 - прогноз, 2 - авария, 3 - взрыв
+predict_type <- 1
 
-# Объем емкости tanks_capacity (вектор) м3 и количество емкостей tanks
-tanks <- 1
-tanks_capacity <- c(1:tanks)
+# наименование ХОВ
+hov_name <- ""
 
-# Толщина слоя разлива h по умолчанию 0,05 м
-# Условия разлива spill_case (1 - тип разлива, 2 - высота H, 3 - площадь F)
-# Тип разлива spill_type:
-# 0 - трубопровод (spill_pipeline)
-# 1 - свободный разлив (spill_free)
-# 2 - в поддон одной емкости (spill_pallet)
-# 3 - в поддон  N емкостей (spill_npallet)
-# Высота разлива H в м -  spill_h
-# Реальная площадь F разлива в паддон/обвалок spill_f м2
+# агрегатное состояние вещества: 1 - газ, 2 - жидкость
+hov_state <- 1
 
-h <- 0.05
-spill_f <- 0
-spill_h <- 0
-spill_type <- 1
-spill_pipline <- 0
-spill_free <- 0
-spill_pallet <- 0
-spill_npallet <- 0
-spill_case <- c(spill_type, spill_h, spill_f)
+# толщина слоя разлива - h
+hov_h <- 0.05
 
-k1 <- 1
-k2 <- 0
-k3 <- 0
-k4 <- 0
-k5 <- 0
-k6 <- 0
-k7 <- numeric(10)
+# высота поддона - H
+hov_hh <- 0.5
 
-names(k7) <- c("-40", "-20", "0", "20", "40", "-40", "-20", "0", "20", "40")
+# площадь разлива - F
+hov_ff <- 5
+
+# тип розлива: 1 - свободный, 2 - индивидуальный поддон, 3 - общий поддон
+spill_type <- c(1, hov_h, hov_hh, hov_ff)
+
+# количество емкостей с ХОВ или отрезков трубопровода
+tanks <- 2
+
+# количество ХОВ в каждой емкости или отрезке трубопровода
+tanks_q <- numeric(tanks)
+
+# количество выброса ХОВ
+hov_v <- 0
+
+# координаты источника заражения: x,y
+object_x <- 0
+object_y <- 0
+
+# время от начала аварии
+emergency_time <- 1
+
+# расстояние от объекта до жилой зоны
+object_distance <- 0
+
+# время суток: 1 - ночь, 2 - утро, 3 - день, 4 - вечер
+day_period <- 1
+
+# Облачность: 1 - ясно, 2 - переменная, 3 - сплошная
+weather_cloudly <- 1
+
+# направление ветра: 1 - С, 2 - В, 3 - Ю, 4 - З, 5 - СВ, 6 - СЗ, 7 - ЮЗ, 8 - ЮВ
+wind_direction <- 1
+
+# скорость ветра
+wind_speed <- 0
+
+# температура
+temperature <- 20
+
+# дата фрейм для хранения текущего сценария
+df_scenario <- data.frame(predict_type, hov_name, hov_state, spill_type[1],
+                          hov_v, object_x, object_y, emergency_time,
+                          object_distance, day_period, weather_cloudly,
+                          wind_direction, wind_speed, temperature)
+
+
+
 
 # dt_hov35 - таблица параметров ХОВ
 dt_hov35 <- read_excel(
@@ -81,17 +77,20 @@ dt_hov35 <- read_excel(
                 "numeric", "numeric", "numeric", "numeric", "numeric",
                 "numeric", "numeric", "numeric", "numeric"), na = "NA")
 
-# df_hov_predict - фрэйм текущих параметров параметров АХОВ
-df_hov_predict <- data.frame(
-  "Номер" = dt_paramraw, "АХОВ" = hov_name,
-  "Плотность АХОВ, т/м3 (сжатый газ)" = density[1],
-  "Плотность АХОВ, т/м3 (сжиженный газ)" = density[2],
-  "Плотность АХОВ, т/м3 (ядовитый газ)" = density[3],
-  "Температура кипения, С" = boiling_temp,
-  "Пороговая токсидоза, мг/мин" = toxic,
-  "K1" = k1, "K2" = k2, "K3" = k3, "K7, для температуры воздуха" = k7)
+# df_hov_predict - фрэйм текущих параметров параметров выбранного АХОВ
+df_hov_predict <- list(dt_hov35)
+  
+  
+#  
+#  "Номер" = dt_paramraw, "АХОВ" = hov_name,
+#  "Плотность АХОВ, т/м3 (сжатый газ)" = density[1],
+#  "Плотность АХОВ, т/м3 (сжиженный газ)" = density[2],
+#  "Плотность АХОВ, т/м3 (ядовитый газ)" = density[3],
+#  "Температура кипения, С" = boiling_temp,
+#  "Пороговая токсидоза, мг/мин" = toxic,
+#  "K1" = k1, "K2" = k2, "K3" = k3, "K7, для температуры воздуха" = k7)
 
-df_hov_predict[1, 1] <- (3)
+#df_hov_predict[1, 1] <- (3)
 
 # *****Толщина слоя жидкости h, м ********************************************
 layerThicknesscallc <- function(hov_q, density, spill_case) {
